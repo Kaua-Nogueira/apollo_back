@@ -15,17 +15,18 @@ use App\Models\WorkOrderProduct;
 use App\Models\WorkOrderService;
 use App\Models\WorkOrderStatusHistory;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin = User::create(['name'=>'Kauã Nogueira','email'=>'admin@apollo.com.br','password'=>Hash::make('password'),'role'=>'admin']);
-        $johnUser = User::create(['name'=>'João Santos','email'=>'joao@apollo.com.br','password'=>Hash::make('password'),'role'=>'technician']);
-        $pedroUser = User::create(['name'=>'Pedro Lima','email'=>'pedro@apollo.com.br','password'=>Hash::make('password'),'role'=>'technician']);
-        $john = Employee::create(['user_id'=>$johnUser->id,'phone'=>'(98) 99123-4500','specialty'=>'Manutenção e limpeza','hired_at'=>'2024-02-05']);
-        $pedro = Employee::create(['user_id'=>$pedroUser->id,'phone'=>'(98) 98842-1120','specialty'=>'Instalação','hired_at'=>'2025-01-13']);
+        $this->call(UserSeeder::class);
+
+        $admin = User::where('email', env('SEED_ADMIN_EMAIL', 'admin@apollo.com.br'))->firstOrFail();
+        $johnUser = User::where('email', 'joao@apollo.com.br')->firstOrFail();
+        $pedroUser = User::where('email', 'pedro@apollo.com.br')->firstOrFail();
+        $john = Employee::where('user_id', $johnUser->id)->firstOrFail();
+        $pedro = Employee::where('user_id', $pedroUser->id)->firstOrFail();
 
         $serviceData = [['Limpeza de Split','Limpeza',150,60],['Visita técnica','Diagnóstico',100,45],['Manutenção preventiva','Manutenção',220,90],['Troca de capacitor','Manutenção corretiva',120,45],['Instalação 12.000 BTUs','Instalação',650,240],['Carga de gás','Manutenção corretiva',280,90]];
         $services = collect($serviceData)->map(fn($s)=>Service::create(['name'=>$s[0],'category'=>$s[1],'default_price'=>$s[2],'estimated_cost'=>$s[2]*.28,'average_minutes'=>$s[3]]));
@@ -42,4 +43,3 @@ class DatabaseSeeder extends Seeder
         foreach($schedule as $i=>$row){[$customerIndex,$hour,$minute,$type,$status,$tech]=$row;$group=$customers[$customerIndex];$appointment=Appointment::create(['customer_id'=>$group['customer']->id,'address_id'=>$group['address']->id,'equipment_id'=>$group['equipment']->id,'technician_id'=>$tech->id,'scheduled_at'=>now()->startOfDay()->setTime($hour,$minute),'duration_minutes'=>$type==='Instalação'?240:90,'type'=>$type,'status'=>$status,'notes'=>'Atendimento agendado pela central.']);$order=WorkOrder::create(['number'=>'OS-'.now()->format('Ym').'-'.str_pad((string)($i+1),4,'0',STR_PAD_LEFT),'customer_id'=>$group['customer']->id,'address_id'=>$group['address']->id,'equipment_id'=>$group['equipment']->id,'technician_id'=>$tech->id,'appointment_id'=>$appointment->id,'scheduled_at'=>$appointment->scheduled_at,'problem_reported'=>$i===1?'Equipamento não está refrigerando corretamente.':'Manutenção solicitada pelo cliente.','diagnosis'=>$status==='completed'?'Evaporadora com acúmulo de sujeira e filtros saturados.':null,'solution'=>$status==='completed'?'Higienização completa e teste de funcionamento.':null,'status'=>$status]);$service=$services[$i%$services->count()];WorkOrderService::create(['work_order_id'=>$order->id,'service_id'=>$service->id,'name'=>$service->name,'quantity'=>1,'unit_price'=>$service->default_price,'discount'=>0,'total'=>$service->default_price]);if($i===1){$product=$products[0];WorkOrderProduct::create(['work_order_id'=>$order->id,'product_id'=>$product->id,'name'=>$product->name,'quantity'=>1,'unit_price'=>$product->sale_price,'discount'=>0,'total'=>$product->sale_price]);}$total=(float)$order->services()->sum('total')+(float)$order->products()->sum('total');$order->update(['subtotal'=>$total,'total'=>$total,'started_at'=>in_array($status,['in_service','completed'])?$appointment->scheduled_at->copy()->addMinutes(8):null,'finished_at'=>$status==='completed'?$appointment->scheduled_at->copy()->addMinutes(76):null]);$events=['scheduled'];if(in_array($status,['in_service','completed']))$events=array_merge($events,['traveling','arrived','in_service']);if($status==='completed')$events[]='completed';foreach($events as $n=>$event)WorkOrderStatusHistory::create(['work_order_id'=>$order->id,'user_id'=>$tech->user_id,'from_status'=>$n?$events[$n-1]:null,'to_status'=>$event,'occurred_at'=>$appointment->scheduled_at->copy()->addMinutes($n*12)]);if($status==='completed')Payment::create(['work_order_id'=>$order->id,'amount'=>$total,'method'=>'pix','paid_at'=>$order->finished_at,'created_by'=>$admin->id]);}
     }
 }
-

@@ -29,8 +29,12 @@ php artisan storage:link --force
 php artisan config:cache
 php artisan view:cache
 
-if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     php artisan migrate --force
+fi
+
+if [ "${RUN_USER_SEEDER:-true}" = "true" ]; then
+    php artisan db:seed --class=UserSeeder --force
 fi
 
 exec "$@"
