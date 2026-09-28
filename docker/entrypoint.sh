@@ -29,7 +29,9 @@ php artisan storage:link --force
 php artisan config:cache
 php artisan view:cache
 
-if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+if [ "${RESET_DATABASE_ON_START:-false}" = "true" ]; then
+    php artisan migrate:fresh --force
+elif [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     php artisan migrate --force
 fi
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\UserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -11,13 +12,27 @@ class UserSeederTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_default_database_seeder_only_creates_users(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertDatabaseCount('users', 3);
+        $this->assertDatabaseCount('employees', 0);
+        $this->assertDatabaseCount('customers', 0);
+        $this->assertDatabaseCount('services', 0);
+        $this->assertDatabaseCount('products', 0);
+        $this->assertDatabaseCount('appointments', 0);
+        $this->assertDatabaseCount('work_orders', 0);
+        $this->assertDatabaseCount('business_documents', 0);
+    }
+
     public function test_user_seeder_creates_login_users_without_duplicates(): void
     {
         $this->seed(UserSeeder::class);
         $this->seed(UserSeeder::class);
 
         $this->assertDatabaseCount('users', 3);
-        $this->assertDatabaseCount('employees', 2);
+        $this->assertDatabaseCount('employees', 0);
         $this->assertDatabaseHas('users', [
             'email' => 'admin@apollo.com.br',
             'role' => 'admin',
