@@ -1,0 +1,6 @@
+<?php
+namespace App\Http\Controllers\Api;
+use App\Models\TimeEntry;
+use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+class TimeEntryController { private const NEXT=['clock_in'=>['break_start','clock_out'],'break_start'=>['break_end'],'break_end'=>['break_start','clock_out'],'clock_out'=>['clock_in']]; public function clock(Request $request){$action=$request->validate(['action'=>'required|in:clock_in,break_start,break_end,clock_out'])['action'];$employee=$request->user()->employee;if(!$employee)throw ValidationException::withMessages(['employee'=>'Usuário sem funcionário vinculado.']);$last=TimeEntry::where('employee_id',$employee->id)->whereDate('work_date',now())->latest('occurred_at')->first();if($last&&!in_array($action,self::NEXT[$last->type]??[],true))throw ValidationException::withMessages(['action'=>'Registro incompatível com o último evento da jornada.']);if(!$last&&$action!=='clock_in')throw ValidationException::withMessages(['action'=>'A jornada precisa começar com uma entrada.']);$entry=TimeEntry::create(['employee_id'=>$employee->id,'work_date'=>now()->toDateString(),'type'=>$action,'occurred_at'=>now()]);return response()->json(['data'=>$entry],201);} }
