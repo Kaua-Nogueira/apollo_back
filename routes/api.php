@@ -33,6 +33,8 @@ Route::middleware('auth.api')->group(function () {
     Route::post('work-orders/{workOrder}/transition', WorkOrderTransitionController::class);
     Route::post('work-orders/{workOrder}/services', [WorkOrderController::class, 'addService']);
     Route::post('work-orders/{workOrder}/products', [WorkOrderController::class, 'addProduct']);
+    Route::delete('work-orders/{workOrder}/services/{serviceItem}', [WorkOrderController::class, 'removeService']);
+    Route::delete('work-orders/{workOrder}/products/{productItem}', [WorkOrderController::class, 'removeProduct']);
     Route::post('work-orders/{workOrder}/payments', [PaymentController::class, 'store']);
     Route::post('work-orders/{workOrder}/attachments', [AttachmentController::class, 'store']);
     Route::get('technician/today', [TechnicianController::class, 'today']);
