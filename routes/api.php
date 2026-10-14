@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\OperationsController;
 use App\Http\Controllers\Api\ReferenceDataController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\CashController;
+use App\Http\Controllers\Api\ExpenseController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TechnicianController;
 use App\Http\Controllers\Api\TimeEntryController;
@@ -26,6 +28,7 @@ Route::middleware('auth.api')->group(function () {
     Route::get('appointments', [AppointmentController::class, 'index']);
     Route::get('services', [ReferenceDataController::class, 'services']);
     Route::get('products', [ReferenceDataController::class, 'products']);
+    Route::get('cash', [CashController::class, 'index'])->middleware('role:admin');
     Route::apiResource('work-orders', WorkOrderController::class)->parameters(['work-orders'=>'workOrder'])->only(['index','show','store','update']);
     Route::post('work-orders/{workOrder}/transition', WorkOrderTransitionController::class);
     Route::post('work-orders/{workOrder}/services', [WorkOrderController::class, 'addService']);
@@ -60,6 +63,8 @@ Route::middleware('auth.api')->group(function () {
         Route::get('inventory-movements', [OperationsController::class, 'inventory']);
         Route::post('products/{product}/stock-adjustment', [OperationsController::class, 'adjustStock']);
         Route::get('receivables', [OperationsController::class, 'receivables']);
+        Route::get('expenses', [ExpenseController::class, 'index']);
+        Route::post('expenses', [ExpenseController::class, 'store']);
         Route::get('reports', [OperationsController::class, 'reports']);
         Route::get('time-entries', [OperationsController::class, 'timeEntries']);
         Route::put('time-entries/{entry}/adjust', [OperationsController::class, 'adjustTime']);
