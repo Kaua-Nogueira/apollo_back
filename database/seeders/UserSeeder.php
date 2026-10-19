@@ -32,6 +32,12 @@ class UserSeeder extends Seeder
             $defaultPassword,
         );
 
+        $this->seedUser(
+            'funcionario@apollo.com.br',
+            'Carlos Silva',
+            'employee',
+            $defaultPassword,
+        );
     }
 
     private function seedUser(string $email, string $name, string $role, string $password): User
@@ -48,6 +54,17 @@ class UserSeeder extends Seeder
         }
 
         $user->save();
+
+        if ($role !== 'admin') {
+            \App\Models\Employee::firstOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'phone' => '(98) 98888-7777',
+                    'specialty' => $role === 'employee' ? 'Auxiliar Geral' : 'Técnico de Refrigeração',
+                    'active' => true,
+                ]
+            );
+        }
 
         return $user;
     }

@@ -24,22 +24,27 @@ Route::post('auth/login', [AuthController::class, 'login']);
 Route::middleware('auth.api')->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/logout', [AuthController::class, 'logout']);
-    Route::get('dashboard', DashboardController::class)->middleware('role:admin');
-    Route::get('appointments', [AppointmentController::class, 'index']);
-    Route::get('services', [ReferenceDataController::class, 'services']);
-    Route::get('products', [ReferenceDataController::class, 'products']);
-    Route::get('cash', [CashController::class, 'index'])->middleware('role:admin');
-    Route::apiResource('work-orders', WorkOrderController::class)->parameters(['work-orders'=>'workOrder'])->only(['index','show','store','update']);
-    Route::post('work-orders/{workOrder}/transition', WorkOrderTransitionController::class);
-    Route::post('work-orders/{workOrder}/services', [WorkOrderController::class, 'addService']);
-    Route::post('work-orders/{workOrder}/products', [WorkOrderController::class, 'addProduct']);
-    Route::delete('work-orders/{workOrder}/services/{serviceItem}', [WorkOrderController::class, 'removeService']);
-    Route::delete('work-orders/{workOrder}/products/{productItem}', [WorkOrderController::class, 'removeProduct']);
-    Route::post('work-orders/{workOrder}/payments', [PaymentController::class, 'store']);
-    Route::post('work-orders/{workOrder}/attachments', [AttachmentController::class, 'store']);
-    Route::get('technician/today', [TechnicianController::class, 'today']);
+    Route::get('employee/ponto', [TimeEntryController::class, 'ponto']);
     Route::post('time-entries/clock', [TimeEntryController::class, 'clock']);
+
+    Route::middleware('role:admin,technician')->group(function () {
+        Route::get('appointments', [AppointmentController::class, 'index']);
+        Route::get('services', [ReferenceDataController::class, 'services']);
+        Route::get('products', [ReferenceDataController::class, 'products']);
+        Route::apiResource('work-orders', WorkOrderController::class)->parameters(['work-orders'=>'workOrder'])->only(['index','show','store','update']);
+        Route::post('work-orders/{workOrder}/transition', WorkOrderTransitionController::class);
+        Route::post('work-orders/{workOrder}/services', [WorkOrderController::class, 'addService']);
+        Route::post('work-orders/{workOrder}/products', [WorkOrderController::class, 'addProduct']);
+        Route::delete('work-orders/{workOrder}/services/{serviceItem}', [WorkOrderController::class, 'removeService']);
+        Route::delete('work-orders/{workOrder}/products/{productItem}', [WorkOrderController::class, 'removeProduct']);
+        Route::post('work-orders/{workOrder}/payments', [PaymentController::class, 'store']);
+        Route::post('work-orders/{workOrder}/attachments', [AttachmentController::class, 'store']);
+        Route::get('technician/today', [TechnicianController::class, 'today']);
+    });
+
     Route::middleware('role:admin')->group(function () {
+        Route::get('dashboard', DashboardController::class);
+        Route::get('cash', [CashController::class, 'index']);
         Route::delete('work-orders/{workOrder}', [WorkOrderController::class, 'destroy']);
         Route::apiResource('customers', CustomerController::class);
         Route::get('customers/{customer}/addresses', [ReferenceDataController::class, 'addresses']);
