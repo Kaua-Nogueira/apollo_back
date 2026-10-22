@@ -21,7 +21,7 @@ class ApiFlowTest extends TestCase
         $token = $this->adminToken();
 
         $this->withToken($token)->getJson('/api/dashboard')->assertOk()->assertJsonStructure(['data'=>['metrics','upcoming']]);
-        $this->withToken($token)->postJson('/api/customers', ['name'=>'Novo Cliente','phone'=>'(98) 99999-9999'])
+        $this->withToken($token)->postJson('/api/customers', ['name'=>'Novo Cliente','phone'=>'(98) 99999-9999','document'=>'123.456.789-00'])
             ->assertCreated()->assertJsonPath('data.name', 'Novo Cliente');
     }
 
@@ -71,6 +71,37 @@ class ApiFlowTest extends TestCase
         $this->assertDatabaseHas('audit_logs', ['action'=>'business_document_created']);
     }
 
+    public function test_can_generate_receipt_from_work_order_with_items(): void
+    {
+        $token = $this->adminToken();
+        $order = $this->workOrder();
+
+        $service = \App\Models\Service::create(['name' => 'Instalação Split', 'default_price' => 350.00]);
+        $order->services()->create([
+            'service_id' => $service->id,
+            'name' => 'Instalação Split',
+            'quantity' => 1,
+            'unit_price' => 350.00,
+            'discount' => 0,
+            'total' => 350.00,
+        ]);
+        $order->update(['subtotal' => 350.00, 'total' => 350.00]);
+
+        $response = $this->withToken($token)->postJson("/api/work-orders/{$order->id}/generate-receipt", [
+            'register_payment' => true,
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.work_order_id', $order->id)
+            ->assertJsonPath('data.type', 'receipt')
+            ->assertJsonPath('data.total', '350.00');
+
+        $this->assertDatabaseHas('business_document_items', [
+            'name' => 'Instalação Split',
+            'total' => 350.00,
+        ]);
+    }
+
     public function test_admin_can_configure_company_branding(): void
     {
         Storage::fake('public');
@@ -94,6 +125,9 @@ class ApiFlowTest extends TestCase
             ->assertJsonPath('data.company_name', 'Clima Norte')
             ->assertJsonPath('data.document', '12.345.678/0001-90')
             ->assertJsonStructure(['data'=>['logo_image_url','document_header_image_url','document_footer_image_url']]);
+        $this->assertStringStartsWith('/storage/company-branding/', $response->json('data.logo_image_url'));
+        $this->assertStringStartsWith('/storage/company-branding/', $response->json('data.document_header_image_url'));
+        $this->assertStringStartsWith('/storage/company-branding/', $response->json('data.document_footer_image_url'));
         Storage::disk('public')->assertExists($response->json('data.logo_image'));
         Storage::disk('public')->assertExists($response->json('data.document_header_image'));
         Storage::disk('public')->assertExists($response->json('data.document_footer_image'));
@@ -134,12 +168,14 @@ class ApiFlowTest extends TestCase
     private function workOrder(): WorkOrder
     {
         [$customer, $address] = $this->customerContext();
-        $technician = Employee::create([
-            'user_id' => User::where('email', 'joao@apollo.com.br')->firstOrFail()->id,
-            'phone' => '(98) 99123-4500',
-            'specialty' => 'Manutenção e limpeza',
-            'hired_at' => '2024-02-05',
-        ]);
+        $technician = Employee::firstOrCreate(
+            ['user_id' => User::where('email', 'joao@apollo.com.br')->firstOrFail()->id],
+            [
+                'phone' => '(98) 99123-4500',
+                'specialty' => 'Manutenção e limpeza',
+                'hired_at' => '2024-02-05',
+            ]
+        );
 
         return WorkOrder::create([
             'number' => 'OS-TESTE-0001',

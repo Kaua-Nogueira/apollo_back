@@ -39,6 +39,9 @@ Route::middleware('auth.api')->group(function () {
         Route::delete('work-orders/{workOrder}/products/{productItem}', [WorkOrderController::class, 'removeProduct']);
         Route::post('work-orders/{workOrder}/payments', [PaymentController::class, 'store']);
         Route::post('work-orders/{workOrder}/attachments', [AttachmentController::class, 'store']);
+        Route::post('work-orders/{workOrder}/generate-receipt', [BusinessDocumentController::class, 'generateReceiptFromWorkOrder']);
+        Route::get('documents', [BusinessDocumentController::class, 'index']);
+        Route::get('documents/{document}', [BusinessDocumentController::class, 'show']);
         Route::get('technician/today', [TechnicianController::class, 'today']);
     });
 
@@ -95,9 +98,8 @@ Route::middleware('auth.api')->group(function () {
         Route::get('settings', [SettingsController::class, 'show']);
         Route::put('settings', [SettingsController::class, 'update']);
         Route::post('settings', [SettingsController::class, 'update']);
-        Route::get('documents', [BusinessDocumentController::class, 'index']);
         Route::post('documents', [BusinessDocumentController::class, 'store']);
-        Route::get('documents/{document}', [BusinessDocumentController::class, 'show']);
+        Route::post('documents/{document}/generate-work-order', [BusinessDocumentController::class, 'generateWorkOrder']);
     });
 });
 

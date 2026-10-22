@@ -16,8 +16,8 @@ class UserSeederTest extends TestCase
     {
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertDatabaseCount('users', 3);
-        $this->assertDatabaseCount('employees', 0);
+        $this->assertDatabaseCount('users', 4);
+        $this->assertDatabaseCount('employees', 3);
         $this->assertDatabaseCount('customers', 0);
         $this->assertDatabaseCount('services', 0);
         $this->assertDatabaseCount('products', 0);
@@ -31,8 +31,8 @@ class UserSeederTest extends TestCase
         $this->seed(UserSeeder::class);
         $this->seed(UserSeeder::class);
 
-        $this->assertDatabaseCount('users', 3);
-        $this->assertDatabaseCount('employees', 0);
+        $this->assertDatabaseCount('users', 4);
+        $this->assertDatabaseCount('employees', 3);
         $this->assertDatabaseHas('users', [
             'email' => 'admin@apollo.com.br',
             'role' => 'admin',
