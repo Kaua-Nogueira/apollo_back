@@ -22,12 +22,55 @@ class WorkOrderController {
     public function show(Request $request,int $id){$order=$this->orders->find($id);if($request->user()->role==='technician'&&$order->technician_id!==$request->user()->employee?->id)abort(403);return response()->json(['data'=>$order]);}
     public function update(Request $request,WorkOrder $workOrder){$this->access->ensureCanOperate($request->user(),$workOrder);$data=$request->validate(['technician_id'=>'sometimes|nullable|exists:employees,id','scheduled_at'=>'sometimes|date','problem_reported'=>'nullable|string','diagnosis'=>'nullable|string','solution'=>'nullable|string','recommendations'=>'nullable|string','notes'=>'nullable|string','discount'=>'sometimes|numeric|min:0']);if($request->user()->role==='technician')unset($data['technician_id'],$data['scheduled_at'],$data['discount']);$old=$workOrder->only(array_keys($data));$workOrder->update($data);$this->recalculate($workOrder);$this->receivables->sync($workOrder);$this->audit->record('work_order_updated',$workOrder,$old,$data);return response()->json(['data'=>$this->orders->find($workOrder->id)]);}
     public function destroy(Request $request,WorkOrder $workOrder){abort_unless($request->user()->role==='admin',403);DB::transaction(function()use($workOrder){$order=WorkOrder::whereKey($workOrder->id)->lockForUpdate()->firstOrFail();$hasPayments=$order->payments()->exists();$hasReceivedReceivable=Receivable::where('work_order_id',$order->id)->where(fn($query)=>$query->where('received','>',0)->orWhere('status','paid'))->exists();if($hasPayments||$hasReceivedReceivable)abort(422,'Não é possível excluir uma OS que já tenha pagamentos registrados. O histórico financeiro precisa ser preservado.');$this->audit->record('work_order_archived',$order,$order->toArray());Receivable::where('work_order_id',$order->id)->delete();$order->delete();});return response()->noContent();}
-    public function addService(Request $request,WorkOrder $workOrder){$this->access->ensureCanOperate($request->user(),$workOrder);$this->addServiceRow($workOrder,$request->validate(['service_id'=>'required|exists:services,id','quantity'=>'required|numeric|min:.01','unit_price'=>'required|numeric|min:0','discount'=>'nullable|numeric|min:0']));$this->recalculate($workOrder);$this->receivables->sync($workOrder);return response()->json(['data'=>$this->orders->find($workOrder->id)],201);}
+    public function addService(Request $request,WorkOrder $workOrder){
+        $this->access->ensureCanOperate($request->user(),$workOrder);
+        $data=$request->validate([
+            'service_id'=>'nullable|exists:services,id',
+            'name'=>'nullable|string|max:120',
+            'quantity'=>'required|numeric|min:.01',
+            'unit_price'=>'required|numeric|min:0',
+            'discount'=>'nullable|numeric|min:0'
+        ]);
+        if (empty($data['service_id']) && empty(trim($data['name'] ?? ''))) {
+            abort(422, 'Selecione um serviço cadastrado ou informe o nome do serviço.');
+        }
+        $this->addServiceRow($workOrder,$data);
+        $this->recalculate($workOrder);
+        $this->receivables->sync($workOrder);
+        return response()->json(['data'=>$this->orders->find($workOrder->id)],201);
+    }
     public function addProduct(Request $request,WorkOrder $workOrder){$this->access->ensureCanOperate($request->user(),$workOrder);$this->addProductRow($workOrder,$request->validate(['product_id'=>'required|exists:products,id','quantity'=>'required|numeric|min:.001','unit_price'=>'required|numeric|min:0','discount'=>'nullable|numeric|min:0']));$this->recalculate($workOrder);$this->receivables->sync($workOrder);return response()->json(['data'=>$this->orders->find($workOrder->id)],201);}
     public function removeService(Request $request,WorkOrder $workOrder,WorkOrderService $serviceItem){$this->access->ensureCanOperate($request->user(),$workOrder);DB::transaction(function()use($workOrder,$serviceItem){$order=WorkOrder::whereKey($workOrder->id)->lockForUpdate()->firstOrFail();$item=$order->services()->whereKey($serviceItem->id)->lockForUpdate()->firstOrFail();$this->assertItemRemovalKeepsPaymentsCovered($order,(float)$item->total);$old=$item->toArray();$item->delete();$this->recalculate($order);$this->receivables->sync($order->fresh());$this->audit->record('work_order_service_removed',$order,['item'=>$old],['total'=>$order->total]);});return response()->noContent();}
     public function removeProduct(Request $request,WorkOrder $workOrder,WorkOrderProduct $productItem){$this->access->ensureCanOperate($request->user(),$workOrder);DB::transaction(function()use($workOrder,$productItem){$order=WorkOrder::whereKey($workOrder->id)->lockForUpdate()->firstOrFail();$item=$order->products()->whereKey($productItem->id)->lockForUpdate()->firstOrFail();$this->assertItemRemovalKeepsPaymentsCovered($order,(float)$item->total);$old=$item->toArray();$item->delete();$this->inventory->restore(Product::withTrashed()->findOrFail($item->product_id),(float)$item->quantity,$order);$this->recalculate($order);$this->receivables->sync($order->fresh());$this->audit->record('work_order_product_removed',$order,['item'=>$old],['total'=>$order->total]);});return response()->noContent();}
     private function assertItemRemovalKeepsPaymentsCovered(WorkOrder $order,float $itemTotal): void {$newSubtotal=max(0,(float)$order->services()->sum('total')+(float)$order->products()->sum('total')-$itemTotal);$newTotal=max(0,$newSubtotal-(float)$order->discount);$received=(float)$order->payments()->sum('amount');if($newTotal+0.00001<$received)abort(422,'Não é possível remover este item: o novo total da OS ficaria menor que o valor já recebido.');}
-    private function addServiceRow(WorkOrder $order,array $item): void {$service=Service::findOrFail($item['service_id']);$quantity=(float)$item['quantity'];$discount=(float)($item['discount']??0);WorkOrderService::create([...$item,'work_order_id'=>$order->id,'name'=>$service->name,'discount'=>$discount,'total'=>max(0,$quantity*(float)$item['unit_price']-$discount)]);}
+    private function addServiceRow(WorkOrder $order,array $item): void {
+        if (!empty($item['service_id'])) {
+            $service=Service::findOrFail($item['service_id']);
+        } else {
+            $name=trim($item['name'] ?? '');
+            if ($name === '') {
+                abort(422, 'O nome do serviço é obrigatório.');
+            }
+            $service=Service::firstOrCreate(
+                ['name' => $name],
+                [
+                    'default_price' => (float)($item['unit_price'] ?? 0),
+                    'active' => true
+                ]
+            );
+            $item['service_id'] = $service->id;
+        }
+        $quantity=(float)$item['quantity'];
+        $discount=(float)($item['discount']??0);
+        WorkOrderService::create([
+            ...$item,
+            'work_order_id'=>$order->id,
+            'name'=>$service->name,
+            'service_id'=>$service->id,
+            'discount'=>$discount,
+            'total'=>max(0,$quantity*(float)$item['unit_price']-$discount)
+        ]);
+    }
     private function addProductRow(WorkOrder $order,array $item): void {$product=Product::findOrFail($item['product_id']);$quantity=(float)$item['quantity'];$discount=(float)($item['discount']??0);$this->inventory->consume($product,$quantity,$order);WorkOrderProduct::create([...$item,'work_order_id'=>$order->id,'name'=>$product->name,'discount'=>$discount,'total'=>max(0,$quantity*(float)$item['unit_price']-$discount)]);}
     private function recalculate(WorkOrder $order): void {$subtotal=(float)$order->services()->sum('total')+(float)$order->products()->sum('total');$order->update(['subtotal'=>$subtotal,'total'=>max(0,$subtotal-(float)$order->discount)]);}
     private function nextNumber(): string {$next=(WorkOrder::withTrashed()->max('id')??0)+1;return 'OS-'.now()->format('Ym').'-'.str_pad((string)$next,4,'0',STR_PAD_LEFT);}

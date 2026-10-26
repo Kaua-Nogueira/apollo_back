@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 
 class CompanySetting extends Model
 {
@@ -11,16 +12,16 @@ class CompanySetting extends Model
 
     public function getLogoImageUrlAttribute(): ?string
     {
-        return $this->logo_image ? '/storage/' . ltrim($this->logo_image, '/') : null;
+        return $this->logo_image ? Storage::disk('public')->url($this->logo_image) : null;
     }
 
     public function getDocumentHeaderImageUrlAttribute(): ?string
     {
-        return $this->document_header_image ? '/storage/' . ltrim($this->document_header_image, '/') : null;
+        return $this->document_header_image ? Storage::disk('public')->url($this->document_header_image) : null;
     }
 
     public function getDocumentFooterImageUrlAttribute(): ?string
     {
-        return $this->document_footer_image ? '/storage/' . ltrim($this->document_footer_image, '/') : null;
+        return $this->document_footer_image ? Storage::disk('public')->url($this->document_footer_image) : null;
     }
 }

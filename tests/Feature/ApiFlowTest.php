@@ -125,9 +125,9 @@ class ApiFlowTest extends TestCase
             ->assertJsonPath('data.company_name', 'Clima Norte')
             ->assertJsonPath('data.document', '12.345.678/0001-90')
             ->assertJsonStructure(['data'=>['logo_image_url','document_header_image_url','document_footer_image_url']]);
-        $this->assertStringStartsWith('/storage/company-branding/', $response->json('data.logo_image_url'));
-        $this->assertStringStartsWith('/storage/company-branding/', $response->json('data.document_header_image_url'));
-        $this->assertStringStartsWith('/storage/company-branding/', $response->json('data.document_footer_image_url'));
+        $this->assertStringContainsString('/storage/company-branding/', $response->json('data.logo_image_url'));
+        $this->assertStringContainsString('/storage/company-branding/', $response->json('data.document_header_image_url'));
+        $this->assertStringContainsString('/storage/company-branding/', $response->json('data.document_footer_image_url'));
         Storage::disk('public')->assertExists($response->json('data.logo_image'));
         Storage::disk('public')->assertExists($response->json('data.document_header_image'));
         Storage::disk('public')->assertExists($response->json('data.document_footer_image'));
@@ -143,6 +143,79 @@ class ApiFlowTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('data.user.role', 'admin')
             ->json('data.token');
+    }
+
+    public function test_can_create_work_order_with_new_custom_service(): void
+    {
+        $token = $this->adminToken();
+        [$customer, $address] = $this->customerContext();
+
+        // 1. Create work order with non-existing custom service
+        $response = $this->withToken($token)->postJson('/api/work-orders', [
+            'customer_id' => $customer->id,
+            'address_id' => $address->id,
+            'scheduled_at' => now()->format('Y-m-d H:i:s'),
+            'services' => [
+                [
+                    'name' => 'Higienização Especial Avulsa',
+                    'quantity' => 1,
+                    'unit_price' => 220.00,
+                ],
+            ],
+        ]);
+
+        $response->assertCreated();
+        $orderId = $response->json('data.id');
+
+        $this->assertDatabaseHas('services', ['name' => 'Higienização Especial Avulsa']);
+        $this->assertDatabaseHas('work_order_services', [
+            'work_order_id' => $orderId,
+            'name' => 'Higienização Especial Avulsa',
+            'total' => 220.00,
+        ]);
+
+        // 2. Add another non-existing service to existing work order
+        $addRes = $this->withToken($token)->postJson("/api/work-orders/{$orderId}/services", [
+            'name' => 'Troca de Capacitor Rápida',
+            'quantity' => 2,
+            'unit_price' => 80.00,
+        ]);
+
+        $addRes->assertCreated();
+        $this->assertDatabaseHas('services', ['name' => 'Troca de Capacitor Rápida']);
+        $this->assertDatabaseHas('work_order_services', [
+            'work_order_id' => $orderId,
+            'name' => 'Troca de Capacitor Rápida',
+            'total' => 160.00,
+        ]);
+    }
+
+    public function test_service_validation_requires_only_name_category_and_cost(): void
+    {
+        $token = $this->adminToken();
+
+        // Missing required fields
+        $resFail = $this->withToken($token)->postJson('/api/services', [
+            'description' => 'Apenas descrição',
+        ]);
+        $resFail->assertUnprocessable();
+        $resFail->assertJsonValidationErrors(['name', 'category', 'estimated_cost']);
+
+        // Success with only name, category, and estimated_cost (default_price is optional)
+        $resSuccess = $this->withToken($token)->postJson('/api/services', [
+            'name' => 'Limpeza de Serpentina',
+            'category' => 'Higienização',
+            'estimated_cost' => 45.00,
+        ]);
+        $resSuccess->assertCreated();
+        $resSuccess->assertJsonPath('data.name', 'Limpeza de Serpentina');
+        $resSuccess->assertJsonPath('data.category', 'Higienização');
+        $this->assertDatabaseHas('services', [
+            'name' => 'Limpeza de Serpentina',
+            'category' => 'Higienização',
+            'estimated_cost' => 45.00,
+            'default_price' => 0.00,
+        ]);
     }
 
     private function customerContext(): array
