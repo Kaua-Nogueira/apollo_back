@@ -218,6 +218,44 @@ class ApiFlowTest extends TestCase
         ]);
     }
 
+    public function test_customer_creation_without_document_and_with_whatsapp(): void
+    {
+        $token = $this->adminToken();
+
+        // 1. Create customer with only name and whatsapp (no document, no separate phone)
+        $res1 = $this->withToken($token)->postJson('/api/customers', [
+            'name' => 'Cliente Sem Documento 1',
+            'whatsapp' => '(98) 98877-6655',
+        ]);
+        $res1->assertCreated();
+        $this->assertDatabaseHas('customers', [
+            'name' => 'Cliente Sem Documento 1',
+            'document' => null,
+            'whatsapp' => '(98) 98877-6655',
+            'phone' => '(98) 98877-6655',
+        ]);
+
+        // 2. Create another customer also without document (should not conflict on unique)
+        $res2 = $this->withToken($token)->postJson('/api/customers', [
+            'name' => 'Cliente Sem Documento 2',
+            'whatsapp' => '(98) 98844-3322',
+        ]);
+        $res2->assertCreated();
+
+        // 3. Create customer with CNPJ document
+        $res3 = $this->withToken($token)->postJson('/api/customers', [
+            'name' => 'Empresa Climatização Ltda',
+            'document' => '12.345.678/0001-90',
+            'whatsapp' => '(98) 99123-4567',
+        ]);
+        $res3->assertCreated();
+        $this->assertDatabaseHas('customers', [
+            'name' => 'Empresa Climatização Ltda',
+            'document' => '12.345.678/0001-90',
+            'whatsapp' => '(98) 99123-4567',
+        ]);
+    }
+
     private function customerContext(): array
     {
         $customer = Customer::create([
